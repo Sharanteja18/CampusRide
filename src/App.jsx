@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { auth, db } from './firebase'
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth'
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail } from 'firebase/auth'
 import { doc, setDoc, getDoc, collection, addDoc, getDocs, query, serverTimestamp, deleteDoc } from 'firebase/firestore'
 
 async function cleanOldEntries() {
@@ -53,7 +53,59 @@ function LandingPage({ onLogin, onSignup }) {
   )
 }
 
-function LoginPage({ onBack, onSuccess }) {
+function ForgotPasswordPage({ onBack }) {
+  const [email, setEmail] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [success, setSuccess] = useState(false)
+  const [error, setError] = useState('')
+
+  const handleReset = async () => {
+    if (!email) { setError('Please enter your email.'); return }
+    setLoading(true); setError('')
+    try {
+      await sendPasswordResetEmail(auth, email)
+      setSuccess(true)
+    } catch (err) {
+      setError('No account found with that email.')
+    }
+    setLoading(false)
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-600 to-indigo-700 flex flex-col items-center justify-center px-4">
+      <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-sm">
+        <button onClick={onBack} className="text-blue-500 text-sm mb-4 hover:underline">Back</button>
+        <h2 className="text-2xl font-bold text-gray-800 mb-1">Reset Password</h2>
+        <p className="text-gray-500 text-sm mb-6">We'll send a reset link to your email 📧</p>
+
+        {success ? (
+          <div className="text-center">
+            <p className="text-4xl mb-4">📬</p>
+            <p className="text-green-600 font-semibold mb-2">Reset link sent!</p>
+            <p className="text-gray-400 text-sm mb-6">Check your email and follow the link to reset your password.</p>
+            <button onClick={onBack} className="w-full bg-blue-600 text-white py-3 rounded-xl font-semibold hover:bg-blue-700 transition">Back to Login</button>
+          </div>
+        ) : (
+          <>
+            <input
+              type="email"
+              placeholder="Your college email"
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 mb-4 text-sm focus:outline-none focus:border-blue-400"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+            />
+            {error && <p className="text-red-500 text-xs mb-4">{error}</p>}
+            <button onClick={handleReset} disabled={loading} className="w-full bg-blue-600 text-white py-3 rounded-xl font-semibold hover:bg-blue-700 transition disabled:opacity-50">
+              {loading ? 'Sending...' : 'Send Reset Link'}
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function LoginPage({ onBack, onSuccess, onForgotPassword }) {
   const [form, setForm] = useState({ email: '', password: '' })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -76,7 +128,10 @@ function LoginPage({ onBack, onSuccess }) {
         <h2 className="text-2xl font-bold text-gray-800 mb-1">Welcome back!</h2>
         <p className="text-gray-500 text-sm mb-6">Sign in to CampusRide 🚗</p>
         <input type="email" placeholder="College Email" className="w-full border border-gray-200 rounded-xl px-4 py-3 mb-3 text-sm focus:outline-none focus:border-blue-400" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
-        <input type="password" placeholder="Password" className="w-full border border-gray-200 rounded-xl px-4 py-3 mb-5 text-sm focus:outline-none focus:border-blue-400" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} />
+        <input type="password" placeholder="Password" className="w-full border border-gray-200 rounded-xl px-4 py-3 mb-2 text-sm focus:outline-none focus:border-blue-400" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} />
+        <div className="text-right mb-5">
+          <button onClick={onForgotPassword} className="text-blue-500 text-xs hover:underline">Forgot Password?</button>
+        </div>
         {error && <p className="text-red-500 text-xs mb-4">{error}</p>}
         <button onClick={handleLogin} disabled={loading} className="w-full bg-blue-600 text-white py-3 rounded-xl font-semibold hover:bg-blue-700 transition disabled:opacity-50">
           {loading ? 'Signing in...' : 'Login'}
@@ -164,34 +219,19 @@ function RateTab({ user }) {
       <div className="bg-white rounded-2xl shadow p-6">
         <h2 className="text-lg font-bold text-gray-800 mb-1">Rate Someone ⭐</h2>
         <p className="text-gray-400 text-xs mb-5">Rate a rider or fellow student after your ride</p>
-
         <p className="text-sm font-semibold text-gray-700 mb-2">Select person:</p>
         <div className="max-h-40 overflow-y-auto mb-5 border border-gray-100 rounded-xl">
           {users.map(u => (
-            <button
-              key={u.email}
-              onClick={() => setSelected(u)}
-              className={`w-full text-left px-4 py-3 text-sm transition border-b border-gray-50 last:border-0 ${selected?.email === u.email ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-700 hover:bg-gray-50'}`}
-            >
+            <button key={u.email} onClick={() => setSelected(u)} className={`w-full text-left px-4 py-3 text-sm transition border-b border-gray-50 last:border-0 ${selected?.email === u.email ? 'bg-blue-50 text-blue-600 font-semibold' : 'text-gray-700 hover:bg-gray-50'}`}>
               {u.name} <span className="text-xs text-gray-400">({u.role})</span>
             </button>
           ))}
         </div>
-
         <p className="text-sm font-semibold text-gray-700 mb-2">Your rating:</p>
         <StarPicker value={stars} onChange={setStars} />
-
-        <textarea
-          placeholder="Write a short review (optional)"
-          className="w-full border border-gray-200 rounded-xl px-4 py-3 mb-5 text-sm focus:outline-none focus:border-blue-400 resize-none"
-          rows={3}
-          value={review}
-          onChange={e => setReview(e.target.value)}
-        />
-
+        <textarea placeholder="Write a short review (optional)" className="w-full border border-gray-200 rounded-xl px-4 py-3 mb-5 text-sm focus:outline-none focus:border-blue-400 resize-none" rows={3} value={review} onChange={e => setReview(e.target.value)} />
         {error && <p className="text-red-500 text-xs mb-3">{error}</p>}
         {success && <p className="text-green-500 text-sm mb-3 text-center">Rating submitted! 🎉</p>}
-
         <button onClick={submitRating} disabled={loading} className="w-full bg-blue-600 text-white py-3 rounded-xl font-semibold hover:bg-blue-700 transition disabled:opacity-50">
           {loading ? 'Submitting...' : 'Submit Rating'}
         </button>
@@ -209,21 +249,15 @@ function RiderDashboard({ user, onLogout }) {
   const [myRides, setMyRides] = useState([])
   const [myRating, setMyRating] = useState(null)
 
-  useEffect(() => {
-    getAverageRating(user.email).then(setMyRating)
-  }, [])
+  useEffect(() => { getAverageRating(user.email).then(setMyRating) }, [])
 
   const postRide = async () => {
     if (!form.from || !form.to || !form.time || !form.seats || !form.phone) return
     setLoading(true)
     await addDoc(collection(db, 'rides'), {
-      riderName: user.name,
-      riderEmail: user.email,
-      from: form.from,
-      to: form.to,
-      time: form.time,
-      seats: parseInt(form.seats),
-      phone: form.phone,
+      riderName: user.name, riderEmail: user.email,
+      from: form.from, to: form.to, time: form.time,
+      seats: parseInt(form.seats), phone: form.phone,
       createdAt: serverTimestamp()
     })
     setForm({ from: '', to: '', time: '', seats: '', phone: '' })
@@ -237,10 +271,7 @@ function RiderDashboard({ user, onLogout }) {
     setMyRides(snap.docs.filter(d => d.data().riderEmail === user.email).map(d => ({ id: d.id, ...d.data() })))
   }
 
-  const deleteRide = async (id) => {
-    await deleteDoc(doc(db, 'rides', id))
-    fetchMyRides()
-  }
+  const deleteRide = async (id) => { await deleteDoc(doc(db, 'rides', id)); fetchMyRides() }
 
   const fetchRequests = async () => {
     const snap = await getDocs(collection(db, 'requests'))
@@ -261,15 +292,12 @@ function RiderDashboard({ user, onLogout }) {
         </div>
         <button onClick={onLogout} className="text-blue-200 text-xs hover:text-white transition">Logout</button>
       </div>
-
       <div className="flex border-b border-gray-200 bg-white">
         <button onClick={() => setTab('post')} className={`flex-1 py-3 text-sm font-semibold transition ${tab === 'post' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-400'}`}>Post a Ride</button>
         <button onClick={() => setTab('requests')} className={`flex-1 py-3 text-sm font-semibold transition ${tab === 'requests' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-400'}`}>Requests</button>
         <button onClick={() => setTab('rate')} className={`flex-1 py-3 text-sm font-semibold transition ${tab === 'rate' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-400'}`}>Rate ⭐</button>
       </div>
-
       {tab === 'rate' && <RateTab user={user} />}
-
       {tab !== 'rate' && (
         <div className="px-4 py-6 max-w-lg mx-auto">
           {tab === 'post' && (
@@ -302,7 +330,6 @@ function RiderDashboard({ user, onLogout }) {
               )}
             </div>
           )}
-
           {tab === 'requests' && (
             <div>
               <h2 className="text-lg font-bold text-gray-800 mb-4">Student Ride Requests 🙋</h2>
@@ -335,9 +362,7 @@ function CustomerDashboard({ user, onLogout }) {
   const [myRequests, setMyRequests] = useState([])
   const [myRating, setMyRating] = useState(null)
 
-  useEffect(() => {
-    getAverageRating(user.email).then(setMyRating)
-  }, [])
+  useEffect(() => { getAverageRating(user.email).then(setMyRating) }, [])
 
   const fetchRides = async () => {
     const snap = await getDocs(collection(db, 'rides'))
@@ -354,21 +379,15 @@ function CustomerDashboard({ user, onLogout }) {
     setMyRequests(snap.docs.filter(d => d.data().studentEmail === user.email).map(d => ({ id: d.id, ...d.data() })))
   }
 
-  const deleteRequest = async (id) => {
-    await deleteDoc(doc(db, 'requests', id))
-    fetchMyRequests()
-  }
+  const deleteRequest = async (id) => { await deleteDoc(doc(db, 'requests', id)); fetchMyRequests() }
 
   const postRequest = async () => {
     if (!form.pickup || !form.drop || !form.time) return
     setLoading(true)
     await addDoc(collection(db, 'requests'), {
-      studentName: user.name,
-      studentEmail: user.email,
-      pickup: form.pickup,
-      drop: form.drop,
-      time: form.time,
-      note: form.note,
+      studentName: user.name, studentEmail: user.email,
+      pickup: form.pickup, drop: form.drop,
+      time: form.time, note: form.note,
       createdAt: serverTimestamp()
     })
     setForm({ pickup: '', drop: '', time: '', note: '' })
@@ -391,15 +410,12 @@ function CustomerDashboard({ user, onLogout }) {
         </div>
         <button onClick={onLogout} className="text-indigo-200 text-xs hover:text-white transition">Logout</button>
       </div>
-
       <div className="flex border-b border-gray-200 bg-white">
         <button onClick={() => setTab('rides')} className={`flex-1 py-3 text-sm font-semibold transition ${tab === 'rides' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-400'}`}>Available Rides</button>
         <button onClick={() => setTab('request')} className={`flex-1 py-3 text-sm font-semibold transition ${tab === 'request' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-400'}`}>Request</button>
         <button onClick={() => setTab('rate')} className={`flex-1 py-3 text-sm font-semibold transition ${tab === 'rate' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-400'}`}>Rate ⭐</button>
       </div>
-
       {tab === 'rate' && <RateTab user={user} />}
-
       {tab !== 'rate' && (
         <div className="px-4 py-6 max-w-lg mx-auto">
           {tab === 'rides' && (
@@ -419,12 +435,7 @@ function CustomerDashboard({ user, onLogout }) {
                     <p className="text-sm text-gray-500">📍 From: {r.from}</p>
                     <p className="text-sm text-gray-500">🏁 To: {r.to}</p>
                     <p className="text-sm text-gray-500">🕐 Time: {r.time}</p>
-                    <a
-                      href={`https://wa.me/91${r.phone}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-3 w-full block text-center border-2 border-green-500 text-green-500 py-2 rounded-xl text-sm font-semibold hover:bg-green-50 transition"
-                    >
+                    <a href={`https://wa.me/91${r.phone}`} target="_blank" rel="noopener noreferrer" className="mt-3 w-full block text-center border-2 border-green-500 text-green-500 py-2 rounded-xl text-sm font-semibold hover:bg-green-50 transition">
                       Contact on WhatsApp 💬
                     </a>
                   </div>
@@ -432,7 +443,6 @@ function CustomerDashboard({ user, onLogout }) {
               }
             </div>
           )}
-
           {tab === 'request' && (
             <div>
               <div className="bg-white rounded-2xl shadow p-6 mb-6">
@@ -489,7 +499,8 @@ function App() {
   return (
     <>
       {page === 'landing' && <LandingPage onLogin={() => setPage('login')} onSignup={() => setPage('signup')} />}
-      {page === 'login' && <LoginPage onBack={() => setPage('landing')} onSuccess={(u) => { setUser(u); setPage('dashboard') }} />}
+      {page === 'login' && <LoginPage onBack={() => setPage('landing')} onSuccess={(u) => { setUser(u); setPage('dashboard') }} onForgotPassword={() => setPage('forgot')} />}
+      {page === 'forgot' && <ForgotPasswordPage onBack={() => setPage('login')} />}
       {page === 'signup' && <SignupPage onBack={() => setPage('landing')} onSuccess={(u) => { setUser(u); setPage('dashboard') }} />}
       {page === 'dashboard' && user?.role === 'rider' && <RiderDashboard user={user} onLogout={handleLogout} />}
       {page === 'dashboard' && user?.role === 'customer' && <CustomerDashboard user={user} onLogout={handleLogout} />}
